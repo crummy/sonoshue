@@ -3,6 +3,8 @@ from BaseHTTPServer import HTTPServer
 from phue import Bridge
 from colorpy import colormodels
 import os
+import sys
+import socket
 
 dispatcher = SoapDispatcher(
     'hue',
@@ -12,13 +14,33 @@ dispatcher = SoapDispatcher(
     debug=True)
 
 
-def getSessionId(username, password):
-    print "getSessionId(%s, %s) called" % (username, password)
-    return username
+# Converts RGB inputs to an xy. From https://github.com/issackelly/python-hue
+def rgb(red, green=None, blue=None):
+    if isinstance(red, basestring):
+        # assume a hex string is passed
+        rstring = red
+        red = int(rstring[1:3], 16)
+        green = int(rstring[3:5], 16)
+        blue = int(rstring[5:], 16)
 
-dispatcher.register_function('getSessionId', getSessionId,
-                             returns={'getSessionIdResult': str},
-                             args={'username': str, 'password': str})
+    # We need to convert the RGB value to Yxy.
+    colormodels.init(phosphor_red=colormodels.xyz_color(0.64843, 0.33086), phosphor_green=colormodels.xyz_color(0.4091,0.518), phosphor_blue=colormodels.xyz_color(0.167, 0.04))
+    xyz = colormodels.irgb_color(red, green, blue)
+    xyz = colormodels.xyz_from_rgb(xyz)
+    xyz = colormodels.xyz_normalize(xyz)
+
+    return [xyz[0], xyz[1]]
+
+lightActions = {'on': {'on': True},
+                'off': {'on': False},
+                'dim': {'on': True, 'bri': 127},
+                'red': {'on': True, 'bri': 254, 'xy': rgb(255, 0, 0)},
+                'green': {'on': True, 'bri': 254, 'xy': rgb(0, 255, 0)},
+                'blue': {'on': True, 'bri': 254, 'xy': rgb(0, 0, 255)},
+                'white': {'on': True, 'bri': 254, 'xy': rgb(255, 255, 255)},
+                'slow_on': {'transitiontime': 300, 'on': True, 'bri': 254},
+                'slow_off': {'transitiontime': 300, 'on': True, 'bri': 0}
+                }
 
 mediaCollection = {'id': str,
                    'title': str,
@@ -44,35 +66,42 @@ mediaMetadata = {'id': str,
                  'trackMetadata': trackMetadata}
 
 
+def getSessionId(username, password):
+    print "getSessionId(%s, %s) called" % (username, password)
+    return username
+
+dispatcher.register_function('getSessionId', getSessionId,
+                             returns={'getSessionIdResult': str},
+                             args={'username': str, 'password': str})
+
+
 def getMetadata(id, index, count):
     print "getMetadata(%s, %s, %s) called" % (id, index, count)
     response = {}
     if id == 'root':  # root
+        lights = bridge.get_light_objects('list')
         response = {'getMetadataResult': [
-            {'index': 0, 'count': 2, 'total': 2},
-            {'mediaCollection': {'id': 'light1', 'title': 'Bedroom', 'itemType': 'container', 'canPlay': False}},
-            {'mediaCollection': {'id': 'light2', 'title': 'Living Room', 'itemType': 'container', 'canPlay': False}}
-        ]}
-    elif id == "light1":
-        response = {'getMetadataResult': [
-            {'index': 0, 'count': 8, 'total': 8},
-            {'mediaMetadata': {'id': 'light1_blue', 'title': 'Blue', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                               'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}},
-            {'mediaMetadata': {'id': 'light1_red', 'title': 'Red', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                               'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}},
-            {'mediaMetadata': {'id': 'light1_green', 'title': 'Green', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                               'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}},
-            {'mediaMetadata': {'id': 'light1_white', 'title': 'White', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                               'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}},
-            {'mediaMetadata': {'id': 'light1_off', 'title': 'Off', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                               'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}},
-            {'mediaMetadata': {'id': 'light1_slowon', 'title': 'Slow On', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                               'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}},
-            {'mediaMetadata': {'id': 'light1_slowoff', 'title': 'Slow Off', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                               'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}},
-            {'mediaMetadata': {'id': 'light1_dim', 'title': 'Dim', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                               'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}}
-        ]}
+            {'index': 0, 'count': len(lights), 'total': len(lights)}]}
+        for light in lights:
+            response['getMetadataResult'].append({'mediaCollection': {'id': str(light.light_id),
+                                                                      'title': light.name,
+                                                                      'itemType': 'container',
+                                                                      'canPlay': False}})
+    else:
+        response = {'getMetadataResult': [{'index': 0, 'count': len(lightActions), 'total': len(lightActions)}]}
+        print "getting light"
+        light = bridge.lights[int(id)]
+        print "got light"
+        for action in lightActions:
+            response['getMetadataResult'].append({'mediaMetadata': {'id': id + '/' + action,
+                                                                    'title': action.title(),
+                                                                    'mimeType': 'audio/mpeg',
+                                                                    'itemType': 'track',
+                                                                    'trackMetadata': {'artist': light.name,
+                                                                                      'albumArtist': light.name,
+                                                                                      'genreId': light.name,
+                                                                                      'duration': 1}}})
+    print "response: %s" % response
     return response
 
 dispatcher.register_function('getMetadata', getMetadata,
@@ -85,36 +114,17 @@ dispatcher.register_function('getMetadata', getMetadata,
 
 
 def getMediaMetadata(id):
-    print "getMediaMetadata(%s) called" % id
-    response = {}
-    if id == "light1_blue":
-        response['getMediaMetadataResult'] = {'mediaMetadata': {'id': 'light1_blue', 'title': 'Blue', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                                      'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}}
-    elif id == "light1_red":
-        response['getMediaMetadataResult'] = {'mediaMetadata': {'id': 'light1_red', 'title': 'Red', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                                      'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}}
-    elif id == "light1_green":
-        response['getMediaMetadataResult'] = {'mediaMetadata': {'id': 'light1_green', 'title': 'Green', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                                      'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}}
-    elif id == "light1_white":
-        response['getMediaMetadataResult'] = {'mediaMetadata': {'id': 'light1_white', 'title': 'White', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                                      'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}}
-    elif id == "light1_off":
-        response['getMediaMetadataResult'] = {'mediaMetadata': {'id': 'light1_off', 'title': 'Off', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                                                                'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}}
-    elif id == "light1_slowon":
-        response['getMediaMetadataResult'] = {'mediaMetadata': {'id': 'light1_slowon', 'title': 'Slow On', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                                                                'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}}
-    elif id == "light1_slowoff":
-        response['getMediaMetadataResult'] = {'mediaMetadata': {'id': 'light1_slowoff', 'title': 'Slow Off', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                                                                'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}}
-    elif id == "light1_dim":
-        response['getMediaMetadataResult'] = {'mediaMetadata': {'id': 'light1_dim', 'title': 'Dim', 'mimeType': 'audio/mpeg', 'itemType': 'track',
-                                                                'trackMetadata': {'artist': 'Bedroom', 'albumArtist': 'Bedroom', 'genreId': 'Bedroom', 'duration': 1}}}
-    else:
-        response['getMediaMetadataResult'] = {'mediaMetadata': {'id': 'ERROR', 'title': 'ERROR', 'mimeType': 'ERROR', 'itemType': 'track',
-                                      'trackMetadata': {'artist': 'ERROR', 'albumArtist': 'ERROR', 'genreId': 'ERROR', 'duration': 1}}}
-        print "No MediaMetadata found for id = %s" % id
+    room = id.split('/')[0]
+    command = id.split('/')[1]
+    print "getMediaMetadata(%s) called with room %s and command %s" % (id, room, command)
+    response = {'getMediaMetadataResult': {'mediaMetadata': {'id': id,
+                                                             'title': command.title(),
+                                                             'mimeType': 'audio/mpeg',
+                                                             'itemType': 'track',
+                                                             'trackMetadata': {'artist': room,
+                                                                               'albumArtist': room,
+                                                                               'genreId': room,
+                                                                               'duration': 1}}}}
     return response
 
 dispatcher.register_function('getMediaMetadata', getMediaMetadata,
@@ -124,7 +134,8 @@ dispatcher.register_function('getMediaMetadata', getMediaMetadata,
 
 def getMediaURI(id):
     print "getMediaURI(%s) called" % id
-    response = {'getMediaURIResult': 'http://192.168.1.164:8080/hue/' + id}
+    response = {'getMediaURIResult': 'http://' + localIP + ':8080/hue/' + id}
+    print 'pointed ZP to http://' + localIP + ':8080/hue/' + id
     return response
 
 dispatcher.register_function('getMediaURI', getMediaURI,
@@ -132,6 +143,8 @@ dispatcher.register_function('getMediaURI', getMediaURI,
                              args={'id': str})
 
 
+# This gets called every once in a while so I created a function that does nothing but respond to it.
+# I think it's so the Controller can cache music when nothing has changed.
 def getLastUpdate():
     print "getLastUpdate() called"
     response = {'getLastUpdateResult': {'catalog': '0', 'favorites': '0', 'pollInterval': 60}}
@@ -141,26 +154,8 @@ dispatcher.register_function('getLastUpdate', getLastUpdate,
                              returns={'getLastUpdateResult': {
                                  'catalog': str,
                                  'favorites': str,
-                                 'pollinterval': int}},
+                                 'pollInterval': int}},
                              args=None)
-
-
-# Converts RGB inputs to an xy. From https://github.com/issackelly/python-hue
-def rgb(red, green=None, blue=None):
-    if isinstance(red, basestring):
-        # assume a hex string is passed
-        rstring = red
-        red = int(rstring[1:3], 16)
-        green = int(rstring[3:5], 16)
-        blue = int(rstring[5:], 16)
-
-    # We need to convert the RGB value to Yxy.
-    colormodels.init(phosphor_red=colormodels.xyz_color(0.64843, 0.33086), phosphor_green=colormodels.xyz_color(0.4091,0.518), phosphor_blue=colormodels.xyz_color(0.167, 0.04))
-    xyz = colormodels.irgb_color(red, green, blue)
-    xyz = colormodels.xyz_from_rgb(xyz)
-    xyz = colormodels.xyz_normalize(xyz)
-
-    return [xyz[0], xyz[1]]
 
 
 class HueSOAPHandler(SOAPHandler):
@@ -175,23 +170,12 @@ class HueSOAPHandler(SOAPHandler):
         self.end_headers()
         self.wfile.write(f.read())
         f.close()
-        print "do_GET() called with path %s" % self.path
-        if self.path.endswith("light1_blue"):
-            bridge.set_light(2, {'on': True, 'bri': 254, 'xy': rgb(0, 0, 255)})
-        elif self.path.endswith("light1_red"):
-            bridge.set_light(2, {'on': True, 'bri': 254, 'xy': rgb(255, 0, 0)})
-        elif self.path.endswith("light1_green"):
-            bridge.set_light(2, {'on': True, 'bri': 254, 'xy': rgb(0, 255, 0)})
-        elif self.path.endswith("light1_white"):
-            bridge.set_light(2, {'on': True, 'bri': 254, 'xy': rgb(255, 255, 255)})
-        elif self.path.endswith("light1_off"):
-            bridge.set_light(2, {'on': False})
-        elif self.path.endswith("light1_slowon"):
-            bridge.set_light(2, {'transitiontime': 150, 'on': True, 'bri': 254})
-        elif self.path.endswith("light1_slowoff"):
-            bridge.set_light(2, {'transitiontime': 150, 'on': True, 'bri': 0})
-        elif self.path.endswith("light1_dim"):
-            bridge.set_light(2, {'on': True, 'bri': 127})
+        light = self.path.split("/")[-2]
+        command = self.path.split("/")[-1]
+        if command.endswith('favicon.ico'):
+            return  # to reduce errors when trying to access light commands via browser
+        print "do_GET() called with light %s and command %s = %s" % (light, command, lightActions[command])
+        bridge.set_light(light, lightActions[command])
 
     # Without this override, BaseHTTPServer performs a reverse DNS lookup to print out the connecting client.
     # This takes like five seconds per request! Ain't nobody got time for that!
@@ -200,10 +184,25 @@ class HueSOAPHandler(SOAPHandler):
         #return socket.getfqdn(host)
         return host
 
-print "Connecting to Hue server..."
-bridge = Bridge("192.168.1.140")
-bridge.connect()
-print "Starting SMAPI server..."
-httpd = HTTPServer(("", 8080), HueSOAPHandler)
-httpd.dispatcher = dispatcher
-httpd.serve_forever()
+if len(sys.argv) < 2:
+    print "Sonos Hue Server, by Malcolm Crum"
+    print "Usage: python hue.py <huehubIP>"
+else:
+    hueIP = sys.argv[1]
+    print "Connecting to Hue server at %s..." % hueIP
+    bridge = Bridge(hueIP)
+    bridge.connect()
+
+    # Figure out your IP address. Mildly complex because you may have multiple interfaces on your machine.
+    # So, we find the IP of the interface that has the hub on it, and hope that your Sonos system is on the same
+    # one.
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.connect((hueIP, 80))
+    localIP = sock.getsockname()[0]
+    sock.close()
+    print "Detected local IP %s" % localIP
+
+    print "Starting SMAPI server..."
+    httpd = HTTPServer(("", 8080), HueSOAPHandler)
+    httpd.dispatcher = dispatcher
+    httpd.serve_forever()

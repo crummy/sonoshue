@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The product of an "innovation week" at Sonos, this Python program performs three functions:
+The product of the Q1 2013 Innovation Week at Sonos, this Python program performs three functions:
 * Interfaces with a Phillips Hue hub by using [studioimaginaire's phue script](https://github.com/studioimaginaire/phue)
 * Provides an interface for this for a Sonos system via a SMAPI service
 * By interpreting specific "play" commands received from a Sonos ZonePlayer, provides control over the Phillips Hue bulbs.

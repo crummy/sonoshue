@@ -29,7 +29,8 @@ The product of the Q1 2013 Innovation Week at Sonos, this Python program perform
 
 ## Requirements
 
-* [colorpy](http://markkness.net/colorpy/ColorPy.html), to convert RGB to the Hue's XY format (thanks [isaackelly](https://github.com/issackelly/python-hue))
+* [ColorPy](http://markkness.net/colorpy/ColorPy.html), to convert RGB to the Hue's XY format (thanks [isaackelly](https://github.com/issackelly/python-hue))
+** ColorPy requires [NumPy](http://www.scipy.org/NumPy)
 * [pysimplesoap](https://code.google.com/p/pysimplesoap/), as all communication with your Sonos components is via SOAP
 
 ##License

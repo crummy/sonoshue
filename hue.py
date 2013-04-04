@@ -175,7 +175,7 @@ class HueSOAPHandler(SOAPHandler):
         if command.endswith('favicon.ico'):
             return  # to reduce errors when trying to access light commands via browser
         print "do_GET() called with light %s and command %s = %s" % (light, command, lightActions[command])
-        bridge.set_light(light, lightActions[command])
+        bridge.set_light(int(light), lightActions[command])
 
     # Without this override, BaseHTTPServer performs a reverse DNS lookup to print out the connecting client.
     # This takes like five seconds per request! Ain't nobody got time for that!

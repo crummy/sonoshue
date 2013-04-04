@@ -1,7 +1,6 @@
 from pysimplesoap.server import SoapDispatcher, SOAPHandler
 from BaseHTTPServer import HTTPServer
 from phue import Bridge
-from colorpy import colormodels
 import os
 import sys
 import socket
@@ -14,30 +13,13 @@ dispatcher = SoapDispatcher(
     debug=True)
 
 
-# Converts RGB inputs to an xy. From https://github.com/issackelly/python-hue
-def rgb(red, green=None, blue=None):
-    if isinstance(red, basestring):
-        # assume a hex string is passed
-        rstring = red
-        red = int(rstring[1:3], 16)
-        green = int(rstring[3:5], 16)
-        blue = int(rstring[5:], 16)
-
-    # We need to convert the RGB value to Yxy.
-    colormodels.init(phosphor_red=colormodels.xyz_color(0.64843, 0.33086), phosphor_green=colormodels.xyz_color(0.4091,0.518), phosphor_blue=colormodels.xyz_color(0.167, 0.04))
-    xyz = colormodels.irgb_color(red, green, blue)
-    xyz = colormodels.xyz_from_rgb(xyz)
-    xyz = colormodels.xyz_normalize(xyz)
-
-    return [xyz[0], xyz[1]]
-
 lightActions = {'on': {'on': True},
                 'off': {'on': False},
                 'dim': {'on': True, 'bri': 127},
-                'red': {'on': True, 'bri': 254, 'xy': rgb(255, 0, 0)},
-                'green': {'on': True, 'bri': 254, 'xy': rgb(0, 255, 0)},
-                'blue': {'on': True, 'bri': 254, 'xy': rgb(0, 0, 255)},
-                'white': {'on': True, 'bri': 254, 'xy': rgb(255, 255, 255)},
+                'red': {'on': True, 'bri': 254, 'hue': 0, 'sat': 255},
+                'green': {'on': True, 'bri': 254, 'hue': 25500, 'sat': 255},
+                'blue': {'on': True, 'bri': 254, 'hue': 46920, 'sat': 255},
+                'white': {'on': True, 'bri': 254, 'sat': 0},
                 'slow_on': {'transitiontime': 300, 'on': True, 'bri': 254},
                 'slow_off': {'transitiontime': 300, 'on': True, 'bri': 0}
                 }

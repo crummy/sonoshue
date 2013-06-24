@@ -17,13 +17,13 @@ The product of the Q1 2013 Innovation Week at Sonos, this Python program perform
 ## Usage
 
 * Press the button on your Hue hub (only necessary the first time)
-* python hue.py <hueHubIP>
-* In a web browser, access http://<ZonePlayerIP>:1400/customsd.htm
-** Enter "Hue" as the name
-** Change SID if you have added other custom services to your Sonos system
-** Both endpoints are http://<yourIP>:8080/hue
-** Login: Anonymous
-** Leave other settings as-is
+* python hue.py [hueHubIP]
+* In a web browser, access http://[ZonePlayerIP]:1400/customsd.htm
+* * Enter "Hue" as the name
+* * Change SID if you have added other custom services to your Sonos system
+* * Both endpoints are http://[yourIP]:8080/hue
+* * Login: Anonymous
+* * Leave other settings as-is
 * On your Sonos system, access the Service Settings menu, and add Hue
 * Control your Hue lights from the new Hue entry on your Music Menu
 
